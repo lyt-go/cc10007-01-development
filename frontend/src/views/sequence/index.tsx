@@ -24,20 +24,6 @@ const statuses = [
   "已确认",
   "已归档"
 ]
-const stats = [
-  {
-    "label": "序列模式总数",
-    "value": 0
-  },
-  {
-    "label": "已确认模式",
-    "value": 0
-  },
-  {
-    "label": "挖掘中模式",
-    "value": 0
-  }
-]
 
 type Row = Record<string, string | number | null>
 
@@ -45,6 +31,7 @@ export default function SequenceView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
+  const [infoMessage, setInfoMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
@@ -52,7 +39,7 @@ export default function SequenceView() {
     setErrorMessage('')
     const query = new URLSearchParams(filters).toString()
     try {
-      const response = await request(`${ENDPOINT}?${query}`)
+      const response = await request(`${ENDPOINT}?${query}&size=200`)
       if (!response.ok) {
         throw new Error('序列模式列表读取失败')
       }
@@ -68,19 +55,51 @@ export default function SequenceView() {
     void reload()
   }, [reload])
 
+  const stats = useMemo(() => [
+    { label: "序列模式总数", value: total },
+    { label: "已确认模式", value: rows.filter((row) => row.status === "已确认").length },
+    { label: "挖掘中模式", value: rows.filter((row) => row.status === "挖掘中").length },
+    { label: "已归档模式", value: rows.filter((row) => row.status === "已归档").length },
+  ], [rows, total])
+
   async function runAction(action: string, row: Row) {
     setErrorMessage('')
+    setInfoMessage('')
     try {
       const response = await request(`${ENDPOINT}/${row.id}/actions`, {
         method: 'POST',
         body: JSON.stringify({ action }),
       })
-      if (!response.ok) {
-        throw new Error('行为序列动作未生效，请稍后重试')
+      const payload = await response.json()
+      if (!payload.ok) {
+        setErrorMessage(payload.message ?? '行为序列动作未生效')
+      } else {
+        setInfoMessage(payload.message ?? '操作已生效')
       }
       await reload()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '行为序列操作失败')
+    }
+  }
+
+  // 新链路回执：确认回执 / 归档事件，后端按模式加锁串行处理并驱动聚类输入快照
+  async function sendReceipt(receiptType: string, row: Row) {
+    setErrorMessage('')
+    setInfoMessage('')
+    try {
+      const response = await request(`/api/cluster-input/patterns/${row.id}/receipts`, {
+        method: 'POST',
+        body: JSON.stringify({ values: { receipt_type: receiptType } }),
+      })
+      const payload = await response.json()
+      if (!payload.ok) {
+        setErrorMessage(payload.message ?? '回执处理失败')
+      } else {
+        setInfoMessage(payload.message ?? '回执已处理')
+      }
+      await reload()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '回执处理失败')
     }
   }
 
@@ -89,7 +108,9 @@ export default function SequenceView() {
       <header className="page-head">
         <div>
           <h2>行为序列管理</h2>
-          <p className="page-desc">挖掘用户行为序列模式，识别高频行为路径和转化瓶颈。</p>
+          <p className="page-desc">
+            挖掘用户行为序列模式，识别高频行为路径和转化瓶颈；已确认模式通过新链路驱动聚类输入快照。
+          </p>
         </div>
         <div className="page-actions">
           <button className="btn primary" type="button" onClick={() => setErrorMessage('序列模式登记入口尚未接入审批流')}>
@@ -125,10 +146,14 @@ export default function SequenceView() {
         <button className="btn ghost" type="button" onClick={() => setFilters({})}>重置条件</button>
       </form>
 
+      {infoMessage && <p className="info-text">{infoMessage}</p>}
+      {errorMessage && <p className="error-text">{errorMessage}</p>}
+
       <table className="data-table">
         <thead>
           <tr>
             {columns.map((column) => <th key={column}>{column}</th>)}
+            <th>状态</th>
             <th>可执行动作</th>
           </tr>
         </thead>
@@ -136,18 +161,25 @@ export default function SequenceView() {
           {rows.map((row) => (
             <tr key={String(row.id)}>
               {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+              <td>{String(row.status ?? '—')}</td>
               <td className="row-actions">
                 {actions.map((action) => (
                   <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
                     {action}
                   </button>
                 ))}
+                <button className="link" type="button" onClick={() => void sendReceipt('确认回执', row)}>
+                  确认回执
+                </button>
+                <button className="link" type="button" onClick={() => void sendReceipt('归档事件', row)}>
+                  归档事件
+                </button>
               </td>
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td className="empty-state" colSpan={columns.length + 1}>暂无行为序列数据，可先登记序列模式</td>
+              <td className="empty-state" colSpan={columns.length + 2}>暂无行为序列数据，可先登记序列模式</td>
             </tr>
           )}
         </tbody>
@@ -155,7 +187,6 @@ export default function SequenceView() {
 
       <footer className="page-foot">
         <span>共 {total} 条行为序列记录</span>
-        {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
     </section>
   )

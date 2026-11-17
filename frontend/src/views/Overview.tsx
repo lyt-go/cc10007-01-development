@@ -10,6 +10,13 @@ type Overview = {
 const fallbackCards = [{"label": "业务模块", "value": 0}, {"label": "今日新增", "value": 0}]
 const fallbackModules = [{"name": "行为序列", "created": 0, "pending": 0, "abnormal": 0}, {"name": "RFM分层", "created": 0, "pending": 0, "abnormal": 0}, {"name": "流失预警", "created": 0, "pending": 0, "abnormal": 0}, {"name": "智能推荐", "created": 0, "pending": 0, "abnormal": 0}, {"name": "归因建模", "created": 0, "pending": 0, "abnormal": 0}, {"name": "活动评估", "created": 0, "pending": 0, "abnormal": 0}, {"name": "实时决策", "created": 0, "pending": 0, "abnormal": 0}, {"name": "预算分配", "created": 0, "pending": 0, "abnormal": 0}, {"name": "LTV估算", "created": 0, "pending": 0, "abnormal": 0}, {"name": "实验变体", "created": 0, "pending": 0, "abnormal": 0}, {"name": "运营看板", "created": 0, "pending": 0, "abnormal": 0}, {"name": "评分卡", "created": 0, "pending": 0, "abnormal": 0}, {"name": "聚类分群", "created": 0, "pending": 0, "abnormal": 0}, {"name": "对比分析", "created": 0, "pending": 0, "abnormal": 0}, {"name": "数据漂移", "created": 0, "pending": 0, "abnormal": 0}, {"name": "推送计划", "created": 0, "pending": 0, "abnormal": 0}, {"name": "指标归因", "created": 0, "pending": 0, "abnormal": 0}, {"name": "策略库", "created": 0, "pending": 0, "abnormal": 0}]
 
+// 新链路运行期表名 → 业务列表里展示的中文名，便于核对关联项
+const MODULE_NAME_MAP: Record<string, string> = {
+  sequence_event: '序列模式事件记录',
+  cluster_input_snapshot: '聚类输入快照',
+  cluster_input_detail: '聚类输入分群明细',
+}
+
 export default function Overview() {
   const [cards, setCards] = useState<Overview['cards']>(fallbackCards)
   const [moduleRows, setModuleRows] = useState<Overview['modules']>(fallbackModules)
@@ -18,7 +25,12 @@ export default function Overview() {
     fetchJson<Overview>('/api/overview')
       .then((payload) => {
         setCards(payload.cards)
-        setModuleRows(payload.modules)
+        setModuleRows(
+          payload.modules.map((row) => ({
+            ...row,
+            name: MODULE_NAME_MAP[row.name] ?? row.name,
+          })),
+        )
       })
       .catch(() => undefined)
   }, [])

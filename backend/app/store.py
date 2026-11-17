@@ -10,10 +10,15 @@ from app.seed import SEED_ROWS
 
 
 class Store:
+    # 新链路运行期产生的表：即使尚无数据也先注册，概览清单保持稳定
+    RUNTIME_MODULES = ["cluster_input_snapshot", "cluster_input_detail"]
+
     def __init__(self) -> None:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        for name in self.RUNTIME_MODULES:
+            self._tables.setdefault(name, [])
 
     def module_names(self) -> list[str]:
         return sorted(self._tables)

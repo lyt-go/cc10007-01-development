@@ -55,6 +55,12 @@ class SequenceService:
         target = ACTION_RULES[action]
         if target not in STATUS_ORDER:
             return None, f"目标状态「{target}」不在允许的状态序列里"
+        current = entry.get("status")
+        if current in STATUS_ORDER and target in STATUS_ORDER:
+            if STATUS_ORDER.index(target) < STATUS_ORDER.index(current):
+                return None, f"序列模式当前为「{current}」，不允许回退到「{target}」"
+            if target == current:
+                return None, f"序列模式已是「{current}」，无需重复{action}"
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS

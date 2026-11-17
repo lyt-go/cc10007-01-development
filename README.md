@@ -62,6 +62,7 @@ npm run dev
 | 运营看板 | `dashboard` | 看板视图 | 视图编号、视图名称、指标组合 |
 | 评分卡 | `scorecard` | 评分卡 | 评分编号、评分对象、特征变量组 |
 | 聚类分群 | `cluster` | 聚类任务 | 任务编号、聚类算法、特征维度 |
+| 聚类输入分群 | `cluster_input` | 聚类输入快照/分群明细 | 快照编号、处理批次、聚类标签、分群覆盖人数、轮廓系数 |
 | 对比分析 | `comparison` | 对比组 | 对比编号、对比名称、实验组筛选 |
 | 数据漂移 | `datadrift` | 漂移检测 | 检测编号、监控数据集、基线版本 |
 | 推送计划 | `pushplan` | 推送方案 | 方案编号、推送内容、目标人群 |
@@ -70,10 +71,36 @@ npm run dev
 
 ## 约定
 
-- 每个模块的前端页面在 `frontend/src/views/<模块>/index.vue`，后端接口在
+- 每个模块的前端页面在 `frontend/src/views/<模块>/index.tsx`，后端接口在
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 聚类输入分群新链路
+
+行为序列挖掘与聚类分群之间通过「聚类输入分群明细数据集」衔接，保证输入版本可追溯：
+
+1. 供新能力推送的序列模式事件记录落入 `sequence_event`（接口
+   `POST/GET /api/cluster-input/events`）；只有「已确认」序列模式的事件允许进入正式快照，
+   挖掘中模式的事件只接收、不入快照。
+2. `POST /api/cluster-input/snapshots` 按新链路读取事件序列，用标准库实现的确定性
+   KMeans++、轮廓系数与高频路径统计（`app/services/cluster_engine.py`）计算分群特征，
+   生成首次形成的聚类输入快照与分群明细。
+3. 快照先以「构建中」暂存，全部明细写完才原子切换为「已发布」；写入中断
+  （`simulate_interrupt=true`）保留「写入中断」半成品用于复核，但聚类侧不可见。
+   新版本发布后旧版本自动置「已替代」，任意时刻只有一个「唯一可用」完整版本。
+4. 聚类任务通过动作「接收分群明细」（`POST /api/cluster/{id}/actions`）只接收唯一可用
+   快照；任务详情 `GET /api/cluster/{id}/details` 列出同一快照下的聚类标签、分群覆盖人数、
+   轮廓系数与处理批次复核。CLUS-0001 作为回归样例。
+5. 同一模式的确认回执与归档事件走 `POST /api/cluster-input/patterns/{id}/receipts`，
+   服务内按模式加锁串行处理，聚类侧永远不会同时看到两份半成品。
+6. 按处理批次复核：`GET /api/cluster-input/batches/{批次}/review`。
+
+服务级回归脚本（不依赖第三方库）：
+
+```bash
+cd backend && .venv/bin/python -I tests/test_cluster_input_flow.py
+```
 
 领域：数据工程
 子方向：数据分析与数据应用

@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/cluster", tags=["聚类分群"])
 
 service = ClusterService()
 
-LIST_FIELDS = ["任务编号", "聚类算法", "特征维度", "目标聚类数", "距离度量", "迭代次数上限", "聚类标签", "轮廓系数"]
+LIST_FIELDS = ["任务编号", "聚类算法", "特征维度", "目标聚类数", "距离度量", "迭代次数上限", "聚类标签", "轮廓系数", "分群覆盖人数", "关联快照编号", "处理批次"]
 STATUSES = ["草稿", "聚类计算中", "已完成", "已归档"]
 
 
@@ -37,6 +37,15 @@ def get_entry(entry_id: int) -> dict:
     if entry is None:
         raise HTTPException(status_code=404, detail=f"聚类任务 {entry_id} 不存在或已归档")
     return entry
+
+
+@router.get("/{entry_id}/details")
+def get_task_details(entry_id: int) -> dict:
+    """任务详情：同一快照下的聚类标签、分群覆盖人数、轮廓系数与处理批次核对信息。"""
+    details = service.task_details(entry_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail=f"聚类任务 {entry_id} 不存在或已归档")
+    return details
 
 
 @router.post("", response_model=ActionResult)
